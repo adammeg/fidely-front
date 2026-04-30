@@ -1,8 +1,22 @@
-import { useContext, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useContext, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { api } from '../lib/api';
-import { Button, Card, LogoMark, Screen, theme } from '../ui/components';
+import {
+  Avatar,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  IconBadge,
+  IconButton,
+  Pill,
+  Screen,
+  SectionTitle,
+  theme,
+} from '../ui/components';
+
+const REWARD_AT = 100;
 
 export default function ShopHomeScreen({ navigation }) {
   const { user, signOut } = useContext(AuthContext);
@@ -11,6 +25,7 @@ export default function ShopHomeScreen({ navigation }) {
   const [pushTitle, setPushTitle] = useState('');
   const [pushBody, setPushBody] = useState('');
   const [pushSending, setPushSending] = useState(false);
+  const [filter, setFilter] = useState('all');
 
   async function load() {
     setLoading(true);
@@ -37,7 +52,7 @@ export default function ShopHomeScreen({ navigation }) {
       await api.post(`/cards/${cardId}/redeem`);
       await load();
     } catch (e) {
-      // MVP: ignore
+      // ignore
     }
   }
 
@@ -57,6 +72,10 @@ export default function ShopHomeScreen({ navigation }) {
         message ||
           `Sent: ${sent}${typeof failed === 'number' && failed > 0 ? `, failed: ${failed}` : ''} (devices targeted: ${targetedDevices ?? '—'})`
       );
+      if (sent) {
+        setPushTitle('');
+        setPushBody('');
+      }
     } catch (e) {
       const msg = e?.response?.data?.message || e?.message || 'Request failed';
       Alert.alert('Push', msg);
@@ -65,61 +84,80 @@ export default function ShopHomeScreen({ navigation }) {
     }
   }
 
+  const stats = useMemo(() => {
+    const total = cards.length;
+    const ready = cards.filter((c) => (c.points || 0) >= REWARD_AT).length;
+    const totalPts = cards.reduce((acc, c) => acc + (c.points || 0), 0);
+    return { total, ready, totalPts };
+  }, [cards]);
+
+  const filteredCards = useMemo(() => {
+    if (filter === 'ready') return cards.filter((c) => (c.points || 0) >= REWARD_AT);
+    return cards;
+  }, [cards, filter]);
+
+  const headerRight = (
+    <View style={{ flexDirection: 'row', gap: 8 }}>
+      <IconButton label="↻" onPress={load} disabled={loading} />
+      <IconButton label="✎" onPress={() => navigation.navigate('ShopSettings')} tone="dark" />
+    </View>
+  );
+
   const header = (
     <>
-      <Card style={{ marginBottom: 14 }}>
-        <Button title="Scan client QR" onPress={() => navigation.navigate('Scan')} />
-        <Button title="Card design (color / logo)" onPress={() => navigation.navigate('ShopSettings')} variant="secondary" />
+      <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
+        <Card style={{ flex: 1, padding: 14 }} delay={40}>
+          <Text style={{ color: theme.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>CLIENTS</Text>
+          <Text style={{ marginTop: 4, fontSize: 22, fontWeight: '900', color: theme.text }}>{stats.total}</Text>
+        </Card>
+        <Card style={{ flex: 1, padding: 14 }} delay={100}>
+          <Text style={{ color: theme.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>POINTS GIVEN</Text>
+          <Text style={{ marginTop: 4, fontSize: 22, fontWeight: '900', color: theme.text }}>{stats.totalPts}</Text>
+        </Card>
+        <Card style={{ flex: 1, padding: 14 }} delay={160}>
+          <Text style={{ color: theme.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>READY</Text>
+          <Text style={{ marginTop: 4, fontSize: 22, fontWeight: '900', color: theme.brand2 }}>{stats.ready}</Text>
+        </Card>
+      </View>
+
+      <Card delay={180} style={{ paddingVertical: 14 }}>
+        <Text style={{ fontWeight: '900', color: theme.text, marginBottom: 12, fontSize: 14 }}>Quick actions</Text>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <ActionTile
+            label="Scan QR"
+            icon="QR"
+            tone="brand"
+            onPress={() => navigation.navigate('Scan')}
+          />
+          <ActionTile
+            label="Card design"
+            icon="✎"
+            onPress={() => navigation.navigate('ShopSettings')}
+          />
+          <ActionTile
+            label="Send offer"
+            icon="↗"
+            onPress={() => null}
+            disabled
+            badge="below"
+          />
+        </View>
       </Card>
-      <Card style={{ marginBottom: 14 }}>
-        <Text style={{ fontWeight: '900', color: theme.text, marginBottom: 8 }}>Push offers</Text>
+
+      <Card delay={240} style={{ marginTop: 12 }}>
+        <Text style={{ fontWeight: '900', color: theme.text, marginBottom: 4 }}>Push offer</Text>
         <Text style={{ color: theme.muted, fontSize: 12, marginBottom: 10, lineHeight: 16 }}>
-          Sends an FCM notification to clients who registered a device token. Requires API Firebase credentials and client dev builds.
+          Send a notification to clients with one of your loyalty cards. Requires a built APK with FCM enabled.
         </Text>
-        <TextInput
-          placeholder="Title"
-          placeholderTextColor="rgba(15, 23, 42, 0.35)"
-          value={pushTitle}
-          onChangeText={setPushTitle}
-          style={{
-            borderWidth: 1,
-            borderColor: theme.border,
-            borderRadius: 16,
-            paddingHorizontal: 12,
-            paddingVertical: 10,
-            color: theme.text,
-            marginBottom: 8,
-            backgroundColor: theme.surface2,
-          }}
-        />
-        <TextInput
-          placeholder="Message"
-          placeholderTextColor="rgba(15, 23, 42, 0.35)"
-          value={pushBody}
-          onChangeText={setPushBody}
-          multiline
-          style={{
-            borderWidth: 1,
-            borderColor: theme.border,
-            borderRadius: 16,
-            paddingHorizontal: 12,
-            paddingVertical: 10,
-            color: theme.text,
-            minHeight: 72,
-            textAlignVertical: 'top',
-            marginBottom: 10,
-            backgroundColor: theme.surface2,
-          }}
-        />
-        <Button title={pushSending ? 'Sending…' : 'Send push'} onPress={sendPushToClients} disabled={pushSending} />
+        <Field placeholder="Title (e.g. -10% today)" value={pushTitle} onChangeText={setPushTitle} leftIcon="✦" />
+        <Field placeholder="Message" value={pushBody} onChangeText={setPushBody} multiline leftIcon="·" />
+        <Button title={pushSending ? 'Sending…' : 'Send push'} onPress={sendPushToClients} disabled={pushSending} variant="dark" />
       </Card>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 8 }}>
         <Text style={{ fontWeight: '900', color: theme.text, fontSize: 16 }}>Clients</Text>
-        <TouchableOpacity onPress={load} disabled={loading}>
-          <Text style={{ color: loading ? 'rgba(15, 23, 42, 0.25)' : theme.muted, fontWeight: '900' }}>
-            Refresh
-          </Text>
-        </TouchableOpacity>
+        <FilterChip label="All" active={filter === 'all'} onPress={() => setFilter('all')} />
+        <FilterChip label="Reward ready" active={filter === 'ready'} onPress={() => setFilter('ready')} />
       </View>
     </>
   );
@@ -127,52 +165,121 @@ export default function ShopHomeScreen({ navigation }) {
   const footer = (
     <>
       <View style={{ height: 8 }} />
-      <Button title="Logout" onPress={signOut} variant="danger" />
+      <Button title="Logout" onPress={signOut} variant="ghost" />
     </>
   );
 
   return (
     <Screen
       scroll={false}
-      title={`Good morning, ${user?.shopName || 'Shop'}`}
-      subtitle="Scan a client QR to open their card, then add points (+10) per purchase. Redeem at 100 points."
-      right={<LogoMark size={48} />}
+      title={`Hi, ${user?.shopName || 'Shop'}`}
+      subtitle="Scan a client QR to open their card. +10 per purchase, redeem at 100."
+      right={headerRight}
     >
       <FlatList
         style={{ flex: 1 }}
-        data={cards}
+        data={filteredCards}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={header}
         ListFooterComponent={footer}
         contentContainerStyle={{
           flexGrow: 1,
-          justifyContent: cards.length === 0 && !loading ? 'center' : 'flex-start',
+          justifyContent: filteredCards.length === 0 && !loading ? 'flex-start' : 'flex-start',
           paddingBottom: 8,
         }}
-        renderItem={({ item }) => (
-          <Card style={{ marginBottom: 12 }}>
-            <Text style={{ fontWeight: '900', color: theme.text, fontSize: 16 }}>{item.client?.displayName || 'Client'}</Text>
-            <Text style={{ color: theme.muted, marginTop: 6, marginBottom: 10 }}>{item.points} pts</Text>
-            <View style={{ flexDirection: 'row' }}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Button title="+10 purchase" onPress={() => addPurchase(item.id)} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button title="Redeem 100" onPress={() => redeem(item.id)} variant="secondary" />
-              </View>
-            </View>
-          </Card>
+        renderItem={({ item, index }) => (
+          <ClientRow
+            item={item}
+            index={index}
+            onPurchase={() => addPurchase(item.id)}
+            onRedeem={() => redeem(item.id)}
+            onOpen={() => navigation.navigate('ShopCard', { cardId: item.id })}
+          />
         )}
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator style={{ marginVertical: 18 }} />
+            <ActivityIndicator color={theme.brand} style={{ marginVertical: 18 }} />
           ) : (
-            <Text style={{ color: theme.muted, lineHeight: 18, textAlign: 'center', paddingVertical: 10 }}>
-              No clients yet. Tap “Scan client QR”.
-            </Text>
+            <Card>
+              <EmptyState
+                icon="QR"
+                title={filter === 'ready' ? 'No rewards yet' : 'No clients yet'}
+                subtitle={filter === 'ready' ? 'Clients will appear here when they reach 100 points.' : 'Tap “Scan QR” above to register your first client.'}
+              />
+            </Card>
           )
         }
       />
     </Screen>
+  );
+}
+
+function ActionTile({ label, icon, onPress, tone, disabled, badge }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={{
+        flex: 1,
+        alignItems: 'center',
+        paddingVertical: 14,
+        borderRadius: 16,
+        backgroundColor: tone === 'brand' ? theme.brandSoft : theme.surface2,
+        borderWidth: 1,
+        borderColor: theme.border,
+        opacity: disabled ? 0.45 : 1,
+      }}
+    >
+      <IconBadge label={icon} size={36} color={tone === 'brand' ? theme.brand : '#fff'} textColor={tone === 'brand' ? '#fff' : theme.text} />
+      <Text style={{ marginTop: 8, fontWeight: '800', fontSize: 12, color: theme.text }}>{label}</Text>
+      {badge ? <Text style={{ fontSize: 10, color: theme.muted, marginTop: 2 }}>{badge}</Text> : null}
+    </Pressable>
+  );
+}
+
+function FilterChip({ label, active, onPress }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 999,
+        backgroundColor: active ? theme.ink : theme.surface2,
+        borderWidth: 1,
+        borderColor: active ? theme.ink : theme.border,
+      }}
+    >
+      <Text style={{ color: active ? '#fff' : theme.text, fontWeight: '800', fontSize: 12 }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function ClientRow({ item, index, onPurchase, onRedeem, onOpen }) {
+  const ready = (item.points || 0) >= REWARD_AT;
+  return (
+    <Card style={{ marginBottom: 10, padding: 14 }} delay={index * 60}>
+      <Pressable onPress={onOpen} style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Avatar name={item.client?.displayName || '·'} color={ready ? theme.brand : theme.ink} />
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontWeight: '900', color: theme.text, fontSize: 15 }}>
+              {item.client?.displayName || 'Client'}
+            </Text>
+            {ready ? <Pill tone="brand">REWARD READY</Pill> : null}
+          </View>
+          <Text style={{ color: theme.muted, marginTop: 2, fontSize: 12.5 }}>{item.points || 0} pts</Text>
+        </View>
+        <Text style={{ fontSize: 22, color: theme.subtle, fontWeight: '900', marginLeft: 6 }}>›</Text>
+      </Pressable>
+      <View style={{ flexDirection: 'row', marginTop: 12, gap: 10 }}>
+        <View style={{ flex: 1 }}>
+          <Button title="+10" onPress={onPurchase} size="sm" leftIcon="+" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button title="Redeem 100" onPress={onRedeem} variant="secondary" size="sm" />
+        </View>
+      </View>
+    </Card>
   );
 }

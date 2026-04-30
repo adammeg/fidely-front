@@ -1,14 +1,23 @@
 import { useContext, useState } from 'react';
-import { Image, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { getApiErrorMessage } from '../lib/errors';
-import { Button, Card, Field, LogoMark, Screen, theme } from '../ui/components';
+import {
+  Button,
+  Card,
+  CARD_COLOR_PRESETS,
+  Field,
+  LoyaltyCardView,
+  Screen,
+  SectionTitle,
+  theme,
+} from '../ui/components';
 
 export default function ShopSettingsScreen({ navigation }) {
   const { user, refreshMe } = useContext(AuthContext);
   const [shopName, setShopName] = useState(user?.shopName || '');
-  const [cardColor, setCardColor] = useState(user?.cardColor || '#111827');
+  const [cardColor, setCardColor] = useState(user?.cardColor || '#0B1220');
   const [logoUrl, setLogoUrl] = useState(user?.logoUrl || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -32,16 +41,27 @@ export default function ShopSettingsScreen({ navigation }) {
   }
 
   return (
-    <Screen title="Design" subtitle="Customize what clients see on your loyalty card." right={<LogoMark size={44} />}>
+    <Screen title="Card design" subtitle="Customize how your loyalty card looks to clients." contentAlign="top">
+      <SectionTitle>Live preview</SectionTitle>
+      <View style={{ alignItems: 'center', marginBottom: 6 }}>
+        <LoyaltyCardView
+          shopName={shopName || 'Your shop'}
+          cardColor={cardColor}
+          logoUrl={logoUrl}
+          points={70}
+          width={320}
+        />
+      </View>
+
+      <SectionTitle>Identity</SectionTitle>
       <Card>
-        <Field label="Shop name" value={shopName} onChangeText={setShopName} placeholder="My Coffee" autoCapitalize="words" />
         <Field
-          label="Card color"
-          value={cardColor}
-          onChangeText={setCardColor}
-          placeholder="#111827"
-          autoCapitalize="none"
-          helperText="Use a hex color like #111827 or #22c55e."
+          label="Shop name"
+          value={shopName}
+          onChangeText={setShopName}
+          placeholder="My Coffee"
+          autoCapitalize="words"
+          leftIcon="S"
         />
         <Field
           label="Logo URL"
@@ -49,40 +69,53 @@ export default function ShopSettingsScreen({ navigation }) {
           onChangeText={setLogoUrl}
           placeholder="https://..."
           autoCapitalize="none"
-          helperText="Optional. Use a public https image URL."
+          helperText="Optional. Public https image URL."
+          leftIcon="◇"
         />
       </Card>
 
-      <View style={{ marginTop: 10 }}>
-        <Text style={{ fontWeight: '900', marginBottom: 8, color: theme.text }}>Preview</Text>
-        <View style={{ borderRadius: 18, padding: 16, backgroundColor: cardColor || '#111827' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-            <View style={{ flex: 1, paddingRight: logoUrl ? 12 : 0 }}>
-              <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, marginBottom: 6, fontWeight: '700' }}>
-                Loyalty card
-              </Text>
-              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>{shopName || 'Shop'}</Text>
-            </View>
-            {logoUrl ? (
-              <Image
-                source={{ uri: logoUrl }}
-                style={{ width: 56, height: 56, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.15)' }}
-                resizeMode="contain"
+      <SectionTitle>Card color</SectionTitle>
+      <Card>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          {CARD_COLOR_PRESETS.map((c) => {
+            const active = c.toLowerCase() === cardColor.toLowerCase();
+            return (
+              <Pressable
+                key={c}
+                onPress={() => setCardColor(c)}
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 12,
+                  backgroundColor: c,
+                  borderWidth: active ? 3 : 1,
+                  borderColor: active ? theme.brand : theme.border,
+                }}
               />
-            ) : null}
-          </View>
+            );
+          })}
         </View>
-      </View>
+        <View style={{ height: 8 }} />
+        <Field
+          label="Custom hex"
+          value={cardColor}
+          onChangeText={setCardColor}
+          placeholder="#0B1220"
+          autoCapitalize="none"
+          helperText="Use a hex like #0B1220 or #22C55E."
+          leftIcon="#"
+        />
+      </Card>
 
       {error ? (
-        <View style={{ marginTop: 10 }}>
-          <Text style={{ color: theme.danger, lineHeight: 18, fontWeight: '700' }}>{error}</Text>
+        <View style={{ marginTop: 12, padding: 10, borderRadius: 12, backgroundColor: 'rgba(239, 68, 68, 0.10)' }}>
+          <Text style={{ color: theme.danger, lineHeight: 18, fontWeight: '700', fontSize: 13 }}>{error}</Text>
         </View>
       ) : null}
 
-      <Button title={saving ? 'Saving…' : 'Save'} onPress={save} disabled={saving} />
-      <Button title="Cancel" onPress={() => navigation.goBack()} variant="secondary" disabled={saving} />
+      <View style={{ height: 6 }} />
+      <Button title={saving ? 'Saving…' : 'Save changes'} onPress={save} disabled={saving} size="lg" />
+      <Button title="Cancel" onPress={() => navigation.goBack()} variant="ghost" disabled={saving} />
     </Screen>
   );
 }
-

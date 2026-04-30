@@ -1,14 +1,23 @@
 import { useContext, useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { getApiErrorMessage } from '../lib/errors';
-import { Button, Card, Field, LogoMark, Screen, theme } from '../ui/components';
+import {
+  BrandWordmark,
+  Button,
+  Card,
+  Field,
+  Pill,
+  Screen,
+  SegmentedControl,
+  theme,
+} from '../ui/components';
 
-export default function AuthScreen({ route }) {
+export default function AuthScreen({ route, navigation }) {
   const role = route?.params?.role || 'client';
   const { signIn, register } = useContext(AuthContext);
 
-  const [mode, setMode] = useState('login'); // login | register
+  const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [shopName, setShopName] = useState('');
@@ -17,6 +26,7 @@ export default function AuthScreen({ route }) {
   const [error, setError] = useState('');
 
   const roleLabel = useMemo(() => (role === 'shop' ? 'Shop' : 'Client'), [role]);
+  const roleTone = role === 'shop' ? 'brand' : 'default';
 
   async function onSubmit() {
     setError('');
@@ -41,37 +51,89 @@ export default function AuthScreen({ route }) {
   }
 
   return (
-    <Screen
-      title={`${roleLabel}`}
-      subtitle={mode === 'login' ? 'Welcome back. Sign in to continue.' : 'Create an account in less than a minute.'}
-      right={<LogoMark size={48} />}
-    >
+    <Screen contentAlign="top">
+      <View style={{ alignItems: 'center', marginBottom: 18 }}>
+        <Image
+          source={require('../../assets/logo.png')}
+          style={{ width: 72, height: 72, borderRadius: 18, marginBottom: 10 }}
+          resizeMode="contain"
+        />
+        <BrandWordmark size={22} />
+        <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Pill tone={roleTone}>{roleLabel.toUpperCase()}</Pill>
+          <Pressable onPress={() => navigation?.goBack?.()}>
+            <Text style={{ color: theme.muted, fontSize: 12, fontWeight: '800' }}>Switch role</Text>
+          </Pressable>
+        </View>
+      </View>
+
       <Card>
-        <Field label="Email" value={email} onChangeText={setEmail} placeholder="you@email.com" keyboardType="email-address" />
-        <Field label="Password" value={password} onChangeText={setPassword} placeholder="At least 6 characters" secureTextEntry />
+        <SegmentedControl
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: 'login', label: 'Sign in' },
+            { value: 'register', label: 'Create account' },
+          ]}
+        />
+
+        <Field
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          placeholder="you@email.com"
+          keyboardType="email-address"
+          leftIcon="@"
+        />
+        <Field
+          label="Password"
+          value={password}
+          onChangeText={setPassword}
+          placeholder="At least 6 characters"
+          secureTextEntry
+          leftIcon="•"
+        />
 
         {mode === 'register' && role === 'shop' ? (
-          <Field label="Shop name" value={shopName} onChangeText={setShopName} placeholder="My Coffee" autoCapitalize="words" />
+          <Field
+            label="Shop name"
+            value={shopName}
+            onChangeText={setShopName}
+            placeholder="My Coffee"
+            autoCapitalize="words"
+            leftIcon="S"
+          />
         ) : null}
         {mode === 'register' && role === 'client' ? (
-          <Field label="Your name" value={displayName} onChangeText={setDisplayName} placeholder="Adam" autoCapitalize="words" />
+          <Field
+            label="Your name"
+            value={displayName}
+            onChangeText={setDisplayName}
+            placeholder="Adam"
+            autoCapitalize="words"
+            leftIcon="A"
+          />
         ) : null}
 
         {error ? (
-          <View style={{ marginTop: 8 }}>
-            <Text style={{ color: theme.danger, lineHeight: 18, fontWeight: '700' }}>{error}</Text>
+          <View style={{ marginTop: 6, padding: 10, borderRadius: 12, backgroundColor: 'rgba(239, 68, 68, 0.10)' }}>
+            <Text style={{ color: theme.danger, lineHeight: 18, fontWeight: '700', fontSize: 13 }}>{error}</Text>
           </View>
         ) : null}
 
-        <Button title={loading ? 'Please wait…' : mode === 'login' ? 'Login' : 'Create account'} onPress={onSubmit} disabled={loading} />
         <Button
-          title={mode === 'login' ? 'Need an account? Register' : 'Have an account? Login'}
-          onPress={() => setMode(mode === 'login' ? 'register' : 'login')}
-          variant="secondary"
+          title={loading ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
+          onPress={onSubmit}
           disabled={loading}
+          size="lg"
         />
       </Card>
+
+      <View style={{ marginTop: 16, alignItems: 'center' }}>
+        <Text style={{ color: theme.muted, fontSize: 12, textAlign: 'center', lineHeight: 18 }}>
+          By continuing you agree to our terms. {'\n'}Your data stays inside your account.
+        </Text>
+      </View>
     </Screen>
   );
 }
-

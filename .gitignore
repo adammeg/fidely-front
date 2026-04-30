@@ -30,8 +30,7 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# Firebase app config (download from Firebase Console; add paths in app.json when using FCM)
-google-services.json
+# iOS Firebase config (optional; keep local if you add it later)
 GoogleService-Info.plist
 
 # local env files
