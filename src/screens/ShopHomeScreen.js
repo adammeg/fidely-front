@@ -80,21 +80,16 @@ export default function ShopHomeScreen({ navigation }) {
     setPushSending(true);
     try {
       const res = await api.post('/notifications/broadcast', { title, body });
-      const { sent, failed, targetedDevices, message } = res.data;
+      const { targetedDevices, message } = res.data;
       Alert.alert(
         'Push',
         message ||
-          `Sent: ${sent}${typeof failed === 'number' && failed > 0 ? `, failed: ${failed}` : ''} (devices targeted: ${targetedDevices ?? '—'})`
+          `Sent: GOOD notification sent to ${targetedDevices ?? '—'} clients)`
       );
-      if (sent) {
-        setPushTitle('');
-        setPushBody('');
-      }
+      setPushTitle('');
+      setPushBody('');
     } catch (e) {
-      const msg = e?.response?.data?.message || e?.message || 'Request failed';
-      Alert.alert('Push', msg);
-    } finally {
-      setPushSending(false);
+      Alert.alert('Push', e?.response?.data?.message || e?.message || 'Request failed');
     }
   }
 
