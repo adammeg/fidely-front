@@ -13,6 +13,12 @@
         {
           "color": "#ffffff"
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Fidely uses your location to find loyalty shops near you."
+        }
       ]
     ],
     "splash": {
@@ -22,14 +28,15 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fidely",
+      "bundleIdentifier": "com.Fidely",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Fidely uses your location to find loyalty shops near you."
       }
     },
     "android": {
-      "package": "com.fidely",
+      "package": "com.Fidely",
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#ffffff"

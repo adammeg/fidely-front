@@ -8,6 +8,10 @@ export function getApiErrorMessage(error) {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data;
     if (data && typeof data.message === 'string') return data.message;
+    if (data?.errors && typeof data.errors === 'object') {
+      const first = Object.values(data.errors).find((v) => typeof v === 'string');
+      if (first) return first;
+    }
     if (data?.issues && Array.isArray(data.issues)) {
       const first = data.issues[0];
       if (first?.message) return first.message;
@@ -22,4 +26,30 @@ export function getApiErrorMessage(error) {
   }
   if (error instanceof Error) return error.message;
   return 'Something went wrong';
+}
+
+/**
+ * Pull a per-field error map from an axios error (matches the backend `errors` object).
+ * Returns an empty object if none.
+ */
+export function getApiFieldErrors(error) {
+  if (!axios.isAxiosError(error)) return {};
+  const data = error.response?.data;
+  if (data?.errors && typeof data.errors === 'object') {
+    const out = {};
+    for (const k of Object.keys(data.errors)) {
+      const v = data.errors[k];
+      if (typeof v === 'string') out[k] = v;
+    }
+    return out;
+  }
+  if (data?.issues && Array.isArray(data.issues)) {
+    const out = {};
+    for (const i of data.issues) {
+      const path = (i.path || []).join('.') || '_';
+      if (!out[path] && typeof i.message === 'string') out[path] = i.message;
+    }
+    return out;
+  }
+  return {};
 }

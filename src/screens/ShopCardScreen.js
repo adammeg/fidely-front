@@ -1,21 +1,24 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Text, View } from 'react-native';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Alert, Text, View } from 'react-native';
+import { AuthContext } from '../context/AuthContext';
 import { api } from '../lib/api';
 import {
   AnimatedNumber,
   Avatar,
   Button,
   Card,
+  LoadingOverlay,
   Pill,
   ProgressBar,
   Screen,
+  Skeleton,
+  StampGrid,
   theme,
 } from '../ui/components';
 
-const REWARD_AT = 100;
-
 export default function ShopCardScreen({ route, navigation }) {
   const cardId = route?.params?.cardId;
+  const { user } = useContext(AuthContext);
   const [card, setCard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -60,16 +63,48 @@ export default function ShopCardScreen({ route, navigation }) {
     }
   }
 
+  const cfg = useMemo(() => {
+    const loyaltyType = card?.shop?.loyaltyType || user?.loyaltyType || 'points';
+    if (loyaltyType === 'stamps') {
+      const goal = Math.max(2, card?.shop?.stampGoal || user?.stampGoal || 10);
+      return { loyaltyType, increment: 1, threshold: goal };
+    }
+    return {
+      loyaltyType,
+      increment: card?.shop?.pointsPerPurchase || user?.pointsPerPurchase || 10,
+      threshold: card?.shop?.redeemThreshold || user?.redeemThreshold || 100,
+    };
+  }, [card, user]);
+
   const points = card?.points || 0;
-  const ready = points >= REWARD_AT;
-  const mod = points % REWARD_AT;
-  const progress = ready && mod === 0 ? 1 : mod / REWARD_AT;
-  const ptsToNext = mod === 0 && points === 0 ? REWARD_AT : mod === 0 && points > 0 ? 0 : REWARD_AT - mod;
+  const ready = points >= cfg.threshold;
+  const mod = points % cfg.threshold;
+  const progress = ready && mod === 0 ? 1 : mod / cfg.threshold;
+  const ptsToNext = mod === 0 && points === 0 ? cfg.threshold : mod === 0 && points > 0 ? 0 : cfg.threshold - mod;
+  const isStamps = cfg.loyaltyType === 'stamps';
 
   return (
     <Screen title="Card" subtitle="Quick actions for this client." contentAlign="top">
       {loading && !card ? (
-        <ActivityIndicator color={theme.brand} style={{ marginTop: 16 }} />
+        <Card style={{ padding: 18 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Skeleton width={48} height={48} radius={24} />
+            <View style={{ flex: 1 }}>
+              <Skeleton width="60%" height={16} />
+              <View style={{ height: 6 }} />
+              <Skeleton width="40%" height={12} />
+            </View>
+          </View>
+          <View style={{ alignItems: 'center', marginTop: 22 }}>
+            <Skeleton width={120} height={56} radius={14} />
+          </View>
+          <View style={{ height: 16 }} />
+          <Skeleton height={9} radius={6} />
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+            <Skeleton width="48%" height={42} radius={14} />
+            <Skeleton width="48%" height={42} radius={14} />
+          </View>
+        </Card>
       ) : null}
 
       {card ? (
@@ -87,29 +122,50 @@ export default function ShopCardScreen({ route, navigation }) {
             {ready ? <Pill tone="brand">REWARD READY</Pill> : null}
           </View>
 
-          <View style={{ alignItems: 'center', marginTop: 20, marginBottom: 12 }}>
-            <AnimatedNumber
-              value={points}
-              style={{ fontSize: 64, fontWeight: '900', color: theme.text, letterSpacing: -1.5 }}
+          {isStamps ? (
+            <StampGrid
+              filled={mod === 0 && ready ? cfg.threshold : mod}
+              goal={cfg.threshold}
+              width={280}
+              dark
             />
-            <Text style={{ marginTop: -4, color: theme.muted, fontWeight: '800', letterSpacing: 1.4, fontSize: 11 }}>
-              POINTS
-            </Text>
-          </View>
+          ) : (
+            <View style={{ alignItems: 'center', marginTop: 20, marginBottom: 12 }}>
+              <AnimatedNumber
+                value={points}
+                style={{ fontSize: 64, fontWeight: '900', color: theme.text, letterSpacing: -1.5 }}
+              />
+              <Text style={{ marginTop: -4, color: theme.muted, fontWeight: '800', letterSpacing: 1.4, fontSize: 11 }}>
+                POINTS
+              </Text>
+            </View>
+          )}
 
-          <ProgressBar progress={progress} />
+          {!isStamps ? <ProgressBar progress={progress} /> : null}
           <Text style={{ marginTop: 10, color: theme.muted, fontSize: 12.5, textAlign: 'center' }}>
             {ready && mod === 0
               ? '🎉 Free reward unlocked'
-              : `${ptsToNext} pts until next free reward (${REWARD_AT})`}
+              : isStamps
+              ? `${ptsToNext} stamp${ptsToNext === 1 ? '' : 's'} until next free reward (${cfg.threshold})`
+              : `${ptsToNext} pts until next free reward (${cfg.threshold})`}
           </Text>
 
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
             <View style={{ flex: 1 }}>
-              <Button title="+10 purchase" onPress={addPurchase} disabled={busy} leftIcon="+" />
+              <Button
+                title={isStamps ? '+1 stamp' : `+${cfg.increment} purchase`}
+                onPress={addPurchase}
+                loading={busy}
+                leftIcon="+"
+              />
             </View>
             <View style={{ flex: 1 }}>
-              <Button title="Redeem 100" onPress={redeem} variant="secondary" disabled={busy || points < REWARD_AT} />
+              <Button
+                title={isStamps ? 'Redeem' : `Redeem ${cfg.threshold}`}
+                onPress={redeem}
+                variant="secondary"
+                disabled={busy || points < cfg.threshold}
+              />
             </View>
           </View>
         </Card>
@@ -117,6 +173,7 @@ export default function ShopCardScreen({ route, navigation }) {
 
       <View style={{ height: 12 }} />
       <Button title="Back" onPress={() => navigation.goBack()} variant="ghost" />
+      <LoadingOverlay visible={busy && !!card} label="Saving…" />
     </Screen>
   );
 }

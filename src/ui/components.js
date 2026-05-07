@@ -244,6 +244,129 @@ export function ProgressBar({ progress = 0, color = theme.brand, height = 9, tra
   );
 }
 
+/* --------------------------- loading -------------------------------- */
+
+/** Smooth circular spinner (rotating gradient ring approximation). */
+export function Spinner({ size = 22, color = theme.brand, thickness = 3 }) {
+  const value = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(value, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [value]);
+  const rotate = value.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  return (
+    <Animated.View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        borderWidth: thickness,
+        borderColor: 'rgba(0,0,0,0.10)',
+        borderTopColor: color,
+        transform: [{ rotate }],
+      }}
+    />
+  );
+}
+
+/** Three bouncing dots — playful inline indicator. */
+export function LoadingDots({ color = theme.brand, size = 8, gap = 6 }) {
+  const a = useRef(new Animated.Value(0)).current;
+  const b = useRef(new Animated.Value(0)).current;
+  const c = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const make = (val, delay) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(val, { toValue: 1, duration: 360, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
+          Animated.timing(val, { toValue: 0, duration: 360, useNativeDriver: true, easing: Easing.in(Easing.cubic) }),
+        ])
+      );
+    const anims = [make(a, 0), make(b, 140), make(c, 280)];
+    anims.forEach((x) => x.start());
+    return () => anims.forEach((x) => x.stop());
+  }, [a, b, c]);
+  const dot = (val) => ({
+    width: size,
+    height: size,
+    borderRadius: size / 2,
+    backgroundColor: color,
+    marginHorizontal: gap / 2,
+    transform: [
+      { translateY: val.interpolate({ inputRange: [0, 1], outputRange: [0, -size * 0.7] }) },
+      { scale: val.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] }) },
+    ],
+    opacity: val.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }),
+  });
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: size + 6 }}>
+      <Animated.View style={dot(a)} />
+      <Animated.View style={dot(b)} />
+      <Animated.View style={dot(c)} />
+    </View>
+  );
+}
+
+/** Full-screen translucent overlay with spinner — use for blocking actions. */
+export function LoadingOverlay({ visible, label = 'Loading…' }) {
+  const op = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(op, {
+      toValue: visible ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  }, [visible, op]);
+  if (!visible) return null;
+  return (
+    <Animated.View
+      pointerEvents="auto"
+      style={{
+        opacity: op,
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(11, 18, 32, 0.45)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 999,
+      }}
+    >
+      <View style={{ backgroundColor: '#fff', borderRadius: 18, paddingHorizontal: 22, paddingVertical: 18, alignItems: 'center', minWidth: 160, shadowColor: theme.shadow, shadowOpacity: 1, shadowRadius: 24, shadowOffset: { width: 0, height: 16 }, elevation: 12 }}>
+        <Spinner size={26} />
+        <Text style={{ marginTop: 10, color: theme.text, fontWeight: '800', fontSize: 13.5 }}>{label}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+/** Skeleton block with shimmer. Pass width/height/radius to match content. */
+export function Skeleton({ width = '100%', height = 16, radius = 10, style }) {
+  const value = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(value, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.cubic), useNativeDriver: false })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [value]);
+  const bg = value.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ['rgba(11,18,32,0.06)', 'rgba(11,18,32,0.10)', 'rgba(11,18,32,0.06)'],
+  });
+  return (
+    <Animated.View style={[{ width, height, borderRadius: radius, backgroundColor: bg }, style]} />
+  );
+}
+
 /** Animated counter that smoothly tweens between numbers. */
 export function AnimatedNumber({ value = 0, duration = 600, style }) {
   const anim = useRef(new Animated.Value(value)).current;
@@ -263,19 +386,21 @@ export function AnimatedNumber({ value = 0, duration = 600, style }) {
 
 /* --------------------------- inputs ---------------------------------- */
 
-export function Button({ title, onPress, variant = 'primary', disabled, leftIcon, size = 'md', style }) {
-  const { scale, onPressIn, onPressOut } = usePressScale({ disabled });
+export function Button({ title, onPress, variant = 'primary', disabled, leftIcon, size = 'md', style, loading }) {
+  const isDisabled = disabled || loading;
+  const { scale, onPressIn, onPressOut } = usePressScale({ disabled: isDisabled });
   const sizes = {
     sm: { padV: 10, font: 13.5, radius: 12 },
     md: { padV: 14, font: 15, radius: 16 },
     lg: { padV: 17, font: 16, radius: 18 },
   };
   const s = sizes[size] || sizes.md;
+  const lightOnDark = !(variant === 'secondary' || variant === 'ghost');
   return (
     <Animated.View style={[{ transform: [{ scale }] }, style]}>
       <Pressable
         onPress={onPress}
-        disabled={disabled}
+        disabled={isDisabled}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         style={[
@@ -285,12 +410,16 @@ export function Button({ title, onPress, variant = 'primary', disabled, leftIcon
           variant === 'ghost' && styles.btnGhost,
           variant === 'danger' && styles.btnDanger,
           variant === 'dark' && styles.btnDark,
-          disabled && styles.btnDisabled,
+          isDisabled && styles.btnDisabled,
         ]}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-          {leftIcon ? (
-            <Text style={{ marginRight: 8, fontSize: s.font + 1, color: variant === 'secondary' || variant === 'ghost' ? theme.text : '#fff', fontWeight: '900' }}>
+          {loading ? (
+            <View style={{ marginRight: 10 }}>
+              <Spinner size={s.font} thickness={2} color={lightOnDark ? '#fff' : theme.text} />
+            </View>
+          ) : leftIcon ? (
+            <Text style={{ marginRight: 8, fontSize: s.font + 1, color: lightOnDark ? '#fff' : theme.text, fontWeight: '900' }}>
               {leftIcon}
             </Text>
           ) : null}
@@ -355,20 +484,28 @@ export function Field({
   helperText,
   leftIcon,
   multiline,
+  error,
+  onBlur,
 }) {
   const [focused, setFocused] = useState(false);
+  const hasError = typeof error === 'string' && error.length > 0;
+  const borderColor = hasError ? theme.danger : focused ? theme.brand : null;
   return (
     <View style={styles.fieldWrap}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
+      {label ? (
+        <Text style={[styles.label, hasError && { color: theme.danger }]}>{label}</Text>
+      ) : null}
       <View
         style={[
           styles.inputWrap,
-          focused && { borderColor: theme.brand, backgroundColor: '#fff' },
+          borderColor && { borderColor, backgroundColor: hasError ? 'rgba(239,68,68,0.06)' : '#fff' },
           multiline && { alignItems: 'flex-start', paddingVertical: 12 },
         ]}
       >
         {leftIcon ? (
-          <Text style={{ marginRight: 8, fontSize: 16, color: theme.subtle, fontWeight: '900' }}>{leftIcon}</Text>
+          <Text style={{ marginRight: 8, fontSize: 16, color: hasError ? theme.danger : theme.subtle, fontWeight: '900' }}>
+            {leftIcon}
+          </Text>
         ) : null}
         <TextInput
           value={value}
@@ -381,10 +518,17 @@ export function Field({
           keyboardType={keyboardType}
           multiline={multiline}
           onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onBlur={() => {
+            setFocused(false);
+            if (onBlur) onBlur();
+          }}
         />
       </View>
-      {helperText ? <Text style={styles.helper}>{helperText}</Text> : null}
+      {hasError ? (
+        <Text style={[styles.helper, { color: theme.danger, fontWeight: '700' }]}>{error}</Text>
+      ) : helperText ? (
+        <Text style={styles.helper}>{helperText}</Text>
+      ) : null}
     </View>
   );
 }
@@ -436,11 +580,14 @@ export function LoyaltyCardView({
   rewardAt = 100,
   width = 320,
   showProgress = true,
+  loyaltyType = 'points',
 }) {
-  const eligible = points >= rewardAt;
-  const mod = points % rewardAt;
-  const progress = eligible && mod === 0 ? 1 : mod / rewardAt;
-  const ptsToNext = mod === 0 && points === 0 ? rewardAt : mod === 0 && points > 0 ? 0 : rewardAt - mod;
+  const isStamps = loyaltyType === 'stamps';
+  const goal = Math.max(2, rewardAt || (isStamps ? 10 : 100));
+  const eligible = points >= goal;
+  const mod = points % goal;
+  const progress = eligible && mod === 0 ? 1 : mod / goal;
+  const ptsToNext = mod === 0 && points === 0 ? goal : mod === 0 && points > 0 ? 0 : goal - mod;
 
   return (
     <View
@@ -463,7 +610,7 @@ export function LoyaltyCardView({
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <View style={{ flex: 1, paddingRight: logoUrl ? 12 : 0 }}>
           <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '800', letterSpacing: 1.4 }}>
-            LOYALTY CARD
+            {isStamps ? 'STAMP CARD' : 'LOYALTY CARD'}
           </Text>
           <Text style={{ color: '#fff', fontSize: 22, fontWeight: '900', marginTop: 8, letterSpacing: -0.3 }}>
             {shopName}
@@ -480,26 +627,85 @@ export function LoyaltyCardView({
         )}
       </View>
 
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 22 }}>
-        <AnimatedNumber
-          value={points}
-          style={{ color: '#fff', fontSize: 48, fontWeight: '900', letterSpacing: -1 }}
-        />
-        <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '700', marginLeft: 8 }}>
-          points
-        </Text>
-      </View>
+      {isStamps ? (
+        <StampGrid filled={mod === 0 && eligible ? goal : mod} goal={goal} width={width - 44} />
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 22 }}>
+          <AnimatedNumber
+            value={points}
+            style={{ color: '#fff', fontSize: 48, fontWeight: '900', letterSpacing: -1 }}
+          />
+          <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, fontWeight: '700', marginLeft: 8 }}>
+            points
+          </Text>
+        </View>
+      )}
 
       {showProgress ? (
         <View style={{ marginTop: 16 }}>
-          <ProgressBar progress={progress} color="#fff" trackColor="rgba(255,255,255,0.18)" height={8} />
-          <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12.5, marginTop: 10, fontWeight: '700' }}>
+          {!isStamps ? (
+            <ProgressBar progress={progress} color="#fff" trackColor="rgba(255,255,255,0.18)" height={8} />
+          ) : null}
+          <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12.5, marginTop: isStamps ? 4 : 10, fontWeight: '700' }}>
             {eligible && mod === 0
               ? '🎉 Free reward ready — show this card to redeem'
+              : isStamps
+              ? `${ptsToNext} stamp${ptsToNext === 1 ? '' : 's'} until your next free reward`
               : `${ptsToNext} pts until your next free reward`}
           </Text>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/** Grid of N circles — filled ones are highlighted. The last slot (the reward) is marked with a star. */
+export function StampGrid({ filled = 0, goal = 10, width = 280, color = '#fff', dark = false }) {
+  const cols = goal <= 6 ? goal : Math.ceil(goal / 2);
+  const gap = 8;
+  const cell = Math.floor((width - gap * (cols - 1)) / cols);
+  const items = Array.from({ length: goal });
+  const borderC = dark ? 'rgba(11,18,32,0.20)' : 'rgba(255,255,255,0.55)';
+  const emptyText = dark ? 'rgba(11,18,32,0.55)' : 'rgba(255,255,255,0.85)';
+  const filledBg = dark ? '#0B1220' : color;
+  const filledText = dark ? '#fff' : '#0B1220';
+  const captionColor = dark ? 'rgba(11,18,32,0.6)' : 'rgba(255,255,255,0.7)';
+  return (
+    <View style={{ marginTop: 18 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap }}>
+        {items.map((_, i) => {
+          const isFilled = i < filled;
+          const isReward = i === goal - 1;
+          return (
+            <View
+              key={i}
+              style={{
+                width: cell,
+                height: cell,
+                borderRadius: cell / 2,
+                borderWidth: 1.5,
+                borderColor: borderC,
+                backgroundColor: isFilled ? filledBg : 'transparent',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text
+                style={{
+                  color: isFilled ? filledText : emptyText,
+                  fontWeight: '900',
+                  fontSize: Math.max(11, Math.round(cell * 0.42)),
+                }}
+              >
+                {isReward ? '★' : i + 1}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+      <Text style={{ color: captionColor, fontSize: 11.5, marginTop: 10, fontWeight: '700', letterSpacing: 0.6 }}>
+        {Math.min(filled, goal)} / {goal} STAMPS
+      </Text>
     </View>
   );
 }

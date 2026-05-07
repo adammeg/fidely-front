@@ -5,6 +5,7 @@ const app = require('./app.json');
 module.exports = () => ({
   expo: {
     ...app.expo,
+    plugins: [...(app.expo.plugins || []), './plugins/withAndroidReleaseSigning'],
     android: {
       ...app.expo.android,
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || app.expo.android.googleServicesFile,

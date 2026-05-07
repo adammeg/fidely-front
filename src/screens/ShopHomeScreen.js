@@ -1,7 +1,9 @@
 import { useContext, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, Text, View } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { api } from '../lib/api';
+import { registerFcmTokenWithBackend } from '../lib/registerFcmToken';
+import { requestAndRegisterLocation } from '../lib/registerLocation';
 import {
   Avatar,
   Button,
@@ -10,16 +12,23 @@ import {
   Field,
   IconBadge,
   IconButton,
+  LoadingOverlay,
   Pill,
   Screen,
-  SectionTitle,
+  Skeleton,
+  Spinner,
   theme,
 } from '../ui/components';
 
-const REWARD_AT = 100;
+function shopThreshold(user) {
+  if (user?.loyaltyType === 'stamps') return Math.max(2, user?.stampGoal || 10);
+  return Math.max(1, user?.redeemThreshold || 100);
+}
 
 export default function ShopHomeScreen({ navigation }) {
   const { user, signOut } = useContext(AuthContext);
+  const isStamps = user?.loyaltyType === 'stamps';
+  const threshold = shopThreshold(user);
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pushTitle, setPushTitle] = useState('');
@@ -41,6 +50,11 @@ export default function ShopHomeScreen({ navigation }) {
     const unsubscribe = navigation.addListener('focus', load);
     return unsubscribe;
   }, [navigation]);
+
+  useEffect(() => {
+    registerFcmTokenWithBackend(api);
+    requestAndRegisterLocation(api);
+  }, []);
 
   async function addPurchase(cardId) {
     await api.post(`/cards/${cardId}/purchase`);
@@ -86,19 +100,25 @@ export default function ShopHomeScreen({ navigation }) {
 
   const stats = useMemo(() => {
     const total = cards.length;
-    const ready = cards.filter((c) => (c.points || 0) >= REWARD_AT).length;
+    const ready = cards.filter((c) => (c.points || 0) >= threshold).length;
     const totalPts = cards.reduce((acc, c) => acc + (c.points || 0), 0);
     return { total, ready, totalPts };
-  }, [cards]);
+  }, [cards, threshold]);
 
   const filteredCards = useMemo(() => {
-    if (filter === 'ready') return cards.filter((c) => (c.points || 0) >= REWARD_AT);
+    if (filter === 'ready') return cards.filter((c) => (c.points || 0) >= threshold);
     return cards;
-  }, [cards, filter]);
+  }, [cards, filter, threshold]);
 
   const headerRight = (
     <View style={{ flexDirection: 'row', gap: 8 }}>
-      <IconButton label="↻" onPress={load} disabled={loading} />
+      {loading ? (
+        <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+          <Spinner size={20} />
+        </View>
+      ) : (
+        <IconButton label="↻" onPress={load} disabled={loading} />
+      )}
       <IconButton label="✎" onPress={() => navigation.navigate('ShopSettings')} tone="dark" />
     </View>
   );
@@ -111,7 +131,7 @@ export default function ShopHomeScreen({ navigation }) {
           <Text style={{ marginTop: 4, fontSize: 22, fontWeight: '900', color: theme.text }}>{stats.total}</Text>
         </Card>
         <Card style={{ flex: 1, padding: 14 }} delay={100}>
-          <Text style={{ color: theme.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>POINTS GIVEN</Text>
+          <Text style={{ color: theme.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>{isStamps ? 'STAMPS' : 'POINTS'} GIVEN</Text>
           <Text style={{ marginTop: 4, fontSize: 22, fontWeight: '900', color: theme.text }}>{stats.totalPts}</Text>
         </Card>
         <Card style={{ flex: 1, padding: 14 }} delay={160}>
@@ -151,7 +171,7 @@ export default function ShopHomeScreen({ navigation }) {
         </Text>
         <Field placeholder="Title (e.g. -10% today)" value={pushTitle} onChangeText={setPushTitle} leftIcon="✦" />
         <Field placeholder="Message" value={pushBody} onChangeText={setPushBody} multiline leftIcon="·" />
-        <Button title={pushSending ? 'Sending…' : 'Send push'} onPress={sendPushToClients} disabled={pushSending} variant="dark" />
+        <Button title="Send push" onPress={sendPushToClients} loading={pushSending} variant="dark" />
       </Card>
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 8 }}>
@@ -173,7 +193,11 @@ export default function ShopHomeScreen({ navigation }) {
     <Screen
       scroll={false}
       title={`Hi, ${user?.shopName || 'Shop'}`}
-      subtitle="Scan a client QR to open their card. +10 per purchase, redeem at 100."
+      subtitle={
+        isStamps
+          ? `Scan a client QR to open their card. +1 stamp per purchase — free reward at ${threshold}.`
+          : `Scan a client QR to open their card. +${user?.pointsPerPurchase || 10} per purchase, redeem at ${threshold}.`
+      }
       right={headerRight}
     >
       <FlatList
@@ -191,6 +215,9 @@ export default function ShopHomeScreen({ navigation }) {
           <ClientRow
             item={item}
             index={index}
+            isStamps={isStamps}
+            threshold={threshold}
+            increment={user?.pointsPerPurchase || 10}
             onPurchase={() => addPurchase(item.id)}
             onRedeem={() => redeem(item.id)}
             onOpen={() => navigation.navigate('ShopCard', { cardId: item.id })}
@@ -198,18 +225,27 @@ export default function ShopHomeScreen({ navigation }) {
         )}
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator color={theme.brand} style={{ marginVertical: 18 }} />
+            <View>
+              <Skeleton height={70} radius={18} style={{ marginBottom: 10 }} />
+              <Skeleton height={70} radius={18} style={{ marginBottom: 10 }} />
+              <Skeleton height={70} radius={18} />
+            </View>
           ) : (
             <Card>
               <EmptyState
                 icon="QR"
                 title={filter === 'ready' ? 'No rewards yet' : 'No clients yet'}
-                subtitle={filter === 'ready' ? 'Clients will appear here when they reach 100 points.' : 'Tap “Scan QR” above to register your first client.'}
+                subtitle={
+                  filter === 'ready'
+                    ? `Clients will appear here when they reach ${threshold} ${isStamps ? 'stamps' : 'points'}.`
+                    : 'Tap “Scan QR” above to register your first client.'
+                }
               />
             </Card>
           )
         }
       />
+      <LoadingOverlay visible={pushSending} label="Sending push…" />
     </Screen>
   );
 }
@@ -255,8 +291,12 @@ function FilterChip({ label, active, onPress }) {
   );
 }
 
-function ClientRow({ item, index, onPurchase, onRedeem, onOpen }) {
-  const ready = (item.points || 0) >= REWARD_AT;
+function ClientRow({ item, index, isStamps, threshold, increment, onPurchase, onRedeem, onOpen }) {
+  const points = item.points || 0;
+  const ready = points >= threshold;
+  const unitLabel = isStamps
+    ? `${points} / ${threshold} stamps`
+    : `${points} pts · ${threshold - (points % threshold)} to next reward`;
   return (
     <Card style={{ marginBottom: 10, padding: 14 }} delay={index * 60}>
       <Pressable onPress={onOpen} style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -268,16 +308,16 @@ function ClientRow({ item, index, onPurchase, onRedeem, onOpen }) {
             </Text>
             {ready ? <Pill tone="brand">REWARD READY</Pill> : null}
           </View>
-          <Text style={{ color: theme.muted, marginTop: 2, fontSize: 12.5 }}>{item.points || 0} pts</Text>
+          <Text style={{ color: theme.muted, marginTop: 2, fontSize: 12.5 }}>{unitLabel}</Text>
         </View>
         <Text style={{ fontSize: 22, color: theme.subtle, fontWeight: '900', marginLeft: 6 }}>›</Text>
       </Pressable>
       <View style={{ flexDirection: 'row', marginTop: 12, gap: 10 }}>
         <View style={{ flex: 1 }}>
-          <Button title="+10" onPress={onPurchase} size="sm" leftIcon="+" />
+          <Button title={isStamps ? '+1' : `+${increment}`} onPress={onPurchase} size="sm" leftIcon="+" />
         </View>
         <View style={{ flex: 1 }}>
-          <Button title="Redeem 100" onPress={onRedeem} variant="secondary" size="sm" />
+          <Button title={isStamps ? 'Redeem' : `Redeem ${threshold}`} onPress={onRedeem} variant="secondary" size="sm" />
         </View>
       </View>
     </Card>

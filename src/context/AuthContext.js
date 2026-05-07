@@ -1,5 +1,6 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react';
-import { api } from '../lib/api';
+import { Alert } from 'react-native';
+import { api, setForcedSignOutHandler } from '../lib/api';
 import { getStoredUser, getToken, setStoredUser, setToken } from '../lib/storage';
 
 export const AuthContext = createContext(null);
@@ -21,6 +22,14 @@ export function AuthProvider({ children }) {
     return () => {
       mounted = false;
     };
+  }, []);
+
+  useEffect(() => {
+    setForcedSignOutHandler((message) => {
+      setUser(null);
+      Alert.alert('Signed out', message || 'Your account has been disabled.');
+    });
+    return () => setForcedSignOutHandler(null);
   }, []);
 
   const signIn = useCallback(async (email, password) => {

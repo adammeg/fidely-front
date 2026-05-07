@@ -1,9 +1,10 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Text, useWindowDimensions, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { AuthContext } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { registerFcmTokenWithBackend } from '../lib/registerFcmToken';
+import { requestAndRegisterLocation } from '../lib/registerLocation';
 import {
   Avatar,
   Button,
@@ -15,10 +16,15 @@ import {
   Screen,
   SCREEN_GUTTER,
   SectionTitle,
+  Skeleton,
+  Spinner,
   theme,
 } from '../ui/components';
 
-const REWARD_AT = 100;
+function cardThreshold(card) {
+  if (card?.shop?.loyaltyType === 'stamps') return Math.max(2, card?.shop?.stampGoal || 10);
+  return Math.max(1, card?.shop?.redeemThreshold || 100);
+}
 
 export default function ClientHomeScreen() {
   const { user, signOut } = useContext(AuthContext);
@@ -48,6 +54,7 @@ export default function ClientHomeScreen() {
 
   useEffect(() => {
     registerFcmTokenWithBackend(api);
+    requestAndRegisterLocation(api);
   }, []);
 
   useEffect(() => {
@@ -61,11 +68,19 @@ export default function ClientHomeScreen() {
   }).current;
 
   const totalPoints = cards.reduce((acc, c) => acc + (c.points || 0), 0);
-  const readyCount = cards.filter((c) => (c.points || 0) >= REWARD_AT).length;
+  const readyCount = cards.filter((c) => (c.points || 0) >= cardThreshold(c)).length;
+  const hasStamps = cards.some((c) => c?.shop?.loyaltyType === 'stamps');
+  const hasPoints = cards.some((c) => (c?.shop?.loyaltyType || 'points') === 'points');
 
   const headerRight = (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-      <IconButton label="↻" onPress={load} disabled={loading} />
+      {loading ? (
+        <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+          <Spinner size={20} />
+        </View>
+      ) : (
+        <IconButton label="↻" onPress={load} disabled={loading} />
+      )}
       <Avatar name={user?.displayName || 'You'} color={theme.brand} />
     </View>
   );
@@ -75,13 +90,15 @@ export default function ClientHomeScreen() {
   return (
     <Screen
       title={`Hi, ${user?.displayName || 'Client'}`}
-      subtitle="Show your QR to a shop to start collecting points and rewards."
+      subtitle="Show your QR to a shop to start collecting rewards."
       contentAlign="top"
       right={headerRight}
     >
       <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
         <Card style={{ flex: 1, padding: 14 }} delay={60}>
-          <Text style={{ color: theme.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>TOTAL POINTS</Text>
+          <Text style={{ color: theme.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.6 }}>
+            {hasStamps && !hasPoints ? 'TOTAL STAMPS' : hasStamps && hasPoints ? 'TOTAL POINTS / STAMPS' : 'TOTAL POINTS'}
+          </Text>
           <Text style={{ marginTop: 4, fontSize: 22, fontWeight: '900', color: theme.text }}>{totalPoints}</Text>
         </Card>
         <Card style={{ flex: 1, padding: 14 }} delay={120}>
@@ -115,7 +132,10 @@ export default function ClientHomeScreen() {
       </SectionTitle>
 
       {loading && cards.length === 0 ? (
-        <ActivityIndicator color={theme.brand} style={{ marginVertical: 24 }} />
+        <View style={{ marginVertical: 6 }}>
+          <Skeleton height={150} radius={20} style={{ marginBottom: 10 }} />
+          <Skeleton height={150} radius={20} />
+        </View>
       ) : cards.length === 0 ? (
         <Card style={{ paddingVertical: 8 }}>
           <EmptyState
@@ -152,7 +172,8 @@ export default function ClientHomeScreen() {
                     cardColor={item.shop?.cardColor || '#0B1220'}
                     logoUrl={item.shop?.logoUrl || ''}
                     points={item.points || 0}
-                    rewardAt={REWARD_AT}
+                    rewardAt={cardThreshold(item)}
+                    loyaltyType={item.shop?.loyaltyType || 'points'}
                     width={cardWidth}
                   />
                 </View>
